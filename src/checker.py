@@ -101,7 +101,11 @@ class Checker:
         player_check.question_changes_remaining = self.max_question_changes
 
         # Sende Nachricht an Spieler
-        message = self.question_message.format(word_description=word.description)
+        message = self.question_message.format(
+            word_description=player_check.word.description,
+            other_question_keyword=self.other_question_keyword,
+            question_changes_remaining=player_check.question_changes_remaining
+        )
         server.api.message_player(player_id, message)
 
         # Speichere in started_checks
@@ -121,13 +125,21 @@ class Checker:
                 if player_check.question_changes_remaining > 0:
                     player_check.question_changes_remaining -= 1
 
-                    # Select new question
-                    new_word = random.choice(self.words)
+                    # Select new question (exclude current word)
+                    available_words = [w for w in self.words if w.description != player_check.word.description]
+                    if not available_words:
+                        # Fallback if only one word exists
+                        available_words = self.words
+                    new_word = random.choice(available_words)
                     player_check.word = new_word
                     player_check.requested_on = datetime.now()
 
                     # Send new question
-                    message_text = self.question_message.format(word_description=new_word.description)
+                    message_text = self.question_message.format(
+                        word_description=player_check.word.description,
+                        other_question_keyword=self.other_question_keyword,
+                        question_changes_remaining=player_check.question_changes_remaining
+                    )
                     server.api.message_player(player_id, message_text)
 
                     logger.info(f"Player {player_check.name} ({player_id}) requested new question. "
@@ -166,7 +178,11 @@ class Checker:
         # Punish with message (the message serves as reminder)
         else:
             logger.info(f"Punishing player {player_check.name} ({player_id}) for not answering")
-            punish_msg = self.punish_message.format(word_description=player_check.word.description)
+            punish_msg = self.punish_message.format(
+                word_description=player_check.word.description,
+                other_question_keyword=self.other_question_keyword,
+                question_changes_remaining=player_check.question_changes_remaining
+            )
             # Punishing will fail if the player isn't alive, we send them a message instead
             try:
                 server.api.punish_player(player_id, punish_msg)
