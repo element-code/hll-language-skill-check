@@ -30,7 +30,7 @@ try:
             logger.info('no .env found')
 
         servers = []
-        for i in range(1, 9):
+        for i in range(1, 10):
             api_base_url = os.getenv(f'CRCON_{i}_API_BASE_URL')
             api_key = os.getenv(f'CRCON_{i}_API_KEY')
             if api_base_url and api_key:
