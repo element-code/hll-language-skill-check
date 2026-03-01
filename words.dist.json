@@ -11,7 +11,7 @@
   {"description": "Getränk aus Apfelsaft und Sprudelwasser", "matches": ["Apfelschorle"]},
   {"description": "Verb für Fenster putzen", "matches": ["putzen"]},
   {"description": "Name eines Bierglases", "matches": ["Maß", "Maßkrug", "Mas", "Mass"]},
-  {"description": "Süßigkeit in Bärenform", "matches": ["Gummibärchen", "Gummibär"]},
+  {"description": "Süßigkeit in Bärenform", "matches": ["Gummibärchen", "Gummibär", "Gumibär", "Haribo", "Süßigkeit"]},
   {"description": "Wort für den Abend vor Weihnachten", "matches": ["Heiligabend"]},
   {"description": "Gerät zum Haare trocknen", "matches": ["Föhn"]},
   {"description": "System für rückgabe von Flaschen und Dosen im Supermarkt", "matches": ["Pfandautomat", "Leergutrückgabe"]},

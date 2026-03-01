@@ -15,6 +15,7 @@ class CycleStats(Printable):
         self.pending_skill_checks = 0
         self.skill_gained_this_cycle = 0
         self.player_punishes = 0
+        self.removed_offline_checks = 0
 
 class Checker:
     def __init__(self, servers: list[Server], words: list[Word]):
@@ -50,6 +51,23 @@ class Checker:
                 self.stats.total_players = len(current_players)
 
                 logs_by_player = self._fetch_logs(server, previous_check)
+
+                # Remove pending checks for players who have been offline for too long
+                offline_timeout = timedelta(minutes=self.action_after_minutes + 5)
+                players_to_remove = []
+                for player_id, player_check in self.pending_skill_checks.items():
+                    if player_id not in current_players:
+                        time_since_request = datetime.now() - player_check.requested_on
+                        if time_since_request >= offline_timeout:
+                            logger.info(
+                                f"Removing pending check for offline player {player_check.name} ({player_id}). "
+                                f"Time since request: {int(time_since_request.total_seconds() / 60)} minutes"
+                            )
+                            players_to_remove.append(player_id)
+
+                for player_id in players_to_remove:
+                    del self.pending_skill_checks[player_id]
+                    self.stats.removed_offline_checks += 1
 
                 for player_id, player_data in current_players.items():
                     self._process_player(server, player_id, player_data, logs_by_player.get(player_id, []))
@@ -171,8 +189,11 @@ class Checker:
 
         # No correct answer found
         time_elapsed = datetime.now() - player_check.requested_on
-        logger.debug(f"Player {player_check.name} ({player_id}) no correct answer. "
-                    f"Time elapsed: {int(time_elapsed.total_seconds() / 60)} minutes")
+        logger.info(
+            f"Player {player_check.name} ({player_id}) no correct answer. "
+            f"Time elapsed: {int(time_elapsed.total_seconds() / 60)} minutes"
+            f"Possible words: {', '.join(player_check.word.matches)}"
+        )
 
         # Wait during grace period
         if time_elapsed < timedelta(minutes=self.grace_period_minutes):
