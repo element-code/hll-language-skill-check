@@ -91,7 +91,7 @@ class CRCONApi:
 
         response = requests.post(url, headers=self._build_headers("application/json"), json=payload)
         response.raise_for_status()
-        logger.info(f"Kicked player {player_id}")
+        logger.debug(f"Kicked player {player_id}")
 
     def punish_player(self, player_id: str, reason: str) -> None:
         """Punish a player (kills them)."""
@@ -104,7 +104,7 @@ class CRCONApi:
 
         response = requests.post(url, headers=self._build_headers("application/json"), json=payload)
         response.raise_for_status()
-        logger.info(f"Punished player {player_id}")
+        logger.debug(f"Punished player {player_id}")
 
     def add_flag_to_player(self, player_id: str, flag: str, comment: str = None) -> None:
         """Add a flag to a player.
@@ -128,5 +128,5 @@ class CRCONApi:
             json=payload
         )
         response.raise_for_status()
-        logger.info(f"Added flag {flag} to player {player_id}")
+        logger.debug(f"Added flag {flag} to player {player_id}")
 

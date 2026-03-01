@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import time
 import random
 import os
+import unicodedata
 from requests import HTTPError
 from shared.config import Server, PlayerSkillCheck, Word
 from shared.shared import logger, Printable
@@ -133,10 +134,14 @@ class Checker:
         player_check = self.pending_skill_checks[player_id]
 
         for log in logs:
-            message = log.get("content", "").lower()
+            message = log.get("content", "")
+            # Normalize Unicode to NFC form and lowercase for comparison
+            normalized_message = unicodedata.normalize('NFC', message).lower()
+
+            logger.debug(f"Checking message from {player_check.name}: '{message}' (normalized: '{normalized_message}')")
 
             # Check if player requests another question
-            if self.change_question_keyword in message:
+            if self.change_question_keyword in normalized_message:
                 if player_check.question_changes_remaining > 0:
                     player_check.question_changes_remaining -= 1
 
@@ -174,7 +179,11 @@ class Checker:
 
             # Check against all possible matches
             for match in player_check.word.matches:
-                if match.lower() in message:
+                # Normalize both sides to NFC form and lowercase
+                normalized_match = unicodedata.normalize('NFC', match).lower()
+                logger.debug(f"Comparing against match '{match}' (normalized: '{normalized_match}')")
+
+                if normalized_match in normalized_message:
                     logger.info(f"Player {player_check.name} ({player_id}) answered correctly: {message}")
 
                     server.api.add_flag_to_player(
@@ -191,7 +200,7 @@ class Checker:
         time_elapsed = datetime.now() - player_check.requested_on
         logger.info(
             f"Player {player_check.name} ({player_id}) no correct answer. "
-            f"Time elapsed: {int(time_elapsed.total_seconds() / 60)} minutes"
+            f"Time elapsed: {int(time_elapsed.total_seconds() / 60)} minutes "
             f"Possible words: {', '.join(player_check.word.matches)}"
         )
 
