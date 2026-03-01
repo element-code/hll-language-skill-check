@@ -1,0 +1,10 @@
+services:
+  checker:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./words.json:/words.json:ro
+    restart: unless-stopped
