@@ -1,5 +1,14 @@
 # Hack Let Loose - Language Skill Check Bot
 
+## Create an API-Key in your CRCON
+It needs the following permissions:
+- `get_detailed_players`
+- `get_historical_logs`
+- `message_player`
+- `kick` player
+- `punish` player
+- `flag_player`
+
 ## Installation
 We need docker, docker-compose and git installed on your system.
 - `git clone https://github.com/element-code/hll-language-skill-check.git`
@@ -7,9 +16,8 @@ We need docker, docker-compose and git installed on your system.
 - `git fetch --tags`
 - `git checkout $(git tag -l --contains HEAD | tail -n1)`
 - `cp words.dist.json words.json`
-- Edit the `config.yml` file to your needs, see [configuration](#configuration).
-- `cp example.env .env`
-- Edit the `.env` file to your needs, see [configuration](#configuration).
+- `cp dist.env .env`
+- Edit the `.env` file to your needs `nano .env`.
 - `docker compose up --detach --build`
 
 ## Configuration
