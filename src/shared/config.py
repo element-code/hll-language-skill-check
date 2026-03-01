@@ -14,10 +14,10 @@ class Word(Printable):
         self.description: str = description
         self.matches: list[str] = matches
 
-class PlayerCheck(Printable):
-    def __init__(self, name: str, id: str, requested_on: datetime, word: Word):
+class PlayerSkillCheck(Printable):
+    def __init__(self, name: str, player_id: str, requested_on: datetime, word: Word):
         self.name: str = name
-        self.id: str = id
+        self.player_id: str = player_id
         self.requested_on: datetime = requested_on
         self.word: Word = word
         self.question_changes_remaining: int = 2

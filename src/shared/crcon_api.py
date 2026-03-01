@@ -9,14 +9,11 @@ logger = logger('crcon_api')
 
 
 class CRCONApi:
-    """Wrapper für CRCON API Aufrufe."""
-
     def __init__(self, base_url: str, api_key: str):
         self.base_url = base_url
         self.api_key = api_key
 
-    def _get_headers(self, content_type: str = None) -> dict:
-        """Erstelle Standard-Headers für API-Anfragen."""
+    def _build_headers(self, content_type: str = None) -> dict:
         headers = {
             "Authorization": f"Bearer {self.api_key}"
         }
@@ -32,7 +29,7 @@ class CRCONApi:
         """
         url = f"{self.base_url}/get_detailed_players"
 
-        response = requests.get(url, headers=self._get_headers())
+        response = requests.get(url, headers=self._build_headers())
         response.raise_for_status()
 
         data = response.json()
@@ -45,7 +42,7 @@ class CRCONApi:
         """Hole historische Logs vom Server.
 
         Args:
-            from_datetime: Startzeit für Logs (wird zu UTC konvertiert)
+            from_datetime: Startzeit für Logs
             action: Log-Action-Type (default: CHAT)
             exact_action: Ob exakte Action-Übereinstimmung erforderlich ist
 
@@ -63,37 +60,28 @@ class CRCONApi:
             "exact_action": str(exact_action).lower()
         }
 
-        response = requests.get(url, params=params, headers=self._get_headers())
+        response = requests.get(url, params=params, headers=self._build_headers())
         response.raise_for_status()
 
         data = response.json()
         return data.get("result", [])
 
     def message_player(self, player_id: str, message: str) -> None:
-        """Sende eine Nachricht an einen Spieler.
-
-        Args:
-            player_id: ID des Spielers
-            message: Nachricht die gesendet werden soll
-        """
+        """Sends the message to the player"""
         url = f"{self.base_url}/message_player"
         payload = {
             "player_id": player_id,
-            "message": message
+            "message": message,
+            "by": "hll-language-skill-check"
         }
 
-        response = requests.post(url, headers=self._get_headers("application/json"),
-                                json=payload)
+        response = requests.post(url, headers=self._build_headers("application/json"),
+                                 json=payload)
         response.raise_for_status()
         logger.debug(f"Sent message to player {player_id}")
 
     def kick_player(self, player_id: str, reason: str) -> None:
-        """Kicke einen Spieler vom Server.
-
-        Args:
-            player_id: ID des Spielers
-            reason: Grund für den Kick
-        """
+        """Kick a player from the server."""
         url = f"{self.base_url}/kick"
         payload = {
             "player_id": player_id,
@@ -101,24 +89,20 @@ class CRCONApi:
             "by": "hll-language-skill-check"
         }
 
-        response = requests.post(url, headers=self._get_headers("application/json"), json=payload)
+        response = requests.post(url, headers=self._build_headers("application/json"), json=payload)
         response.raise_for_status()
         logger.info(f"Kicked player {player_id}")
 
     def punish_player(self, player_id: str, reason: str) -> None:
-        """Bestrafe einen Spieler (tötet ihn).
-
-        Args:
-            player_id: ID des Spielers
-            reason: Grund für die Bestrafung
-        """
+        """Punish a player (kills them)."""
         url = f"{self.base_url}/punish"
         payload = {
             "player_id": player_id,
-            "reason": reason
+            "reason": reason,
+            "by": "hll-language-skill-check"
         }
 
-        response = requests.post(url, headers=self._get_headers("application/json"), json=payload)
+        response = requests.post(url, headers=self._build_headers("application/json"), json=payload)
         response.raise_for_status()
         logger.info(f"Punished player {player_id}")
 
@@ -138,8 +122,11 @@ class CRCONApi:
         if comment:
             payload["comment"] = comment
 
-        response = requests.post(url, headers=self._get_headers("application/json"),
-                                json=payload)
+        response = requests.post(
+            url,
+            headers=self._build_headers("application/json"),
+            json=payload
+        )
         response.raise_for_status()
         logger.info(f"Added flag {flag} to player {player_id}")
 
