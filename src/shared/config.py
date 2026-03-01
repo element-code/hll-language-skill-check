@@ -20,3 +20,4 @@ class PlayerCheck(Printable):
         self.id: str = id
         self.requested_on: datetime = requested_on
         self.word: Word = word
+        self.question_changes_remaining: int = 2

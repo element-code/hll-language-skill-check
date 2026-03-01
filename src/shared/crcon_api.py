@@ -105,13 +105,30 @@ class CRCONApi:
         response.raise_for_status()
         logger.info(f"Kicked player {player_id}")
 
-    def add_flag_to_player(self, player_id: str, flag: str, comment: str = None) -> None:
-        """Füge einem Spieler ein Flag hinzu.
+    def punish_player(self, player_id: str, reason: str) -> None:
+        """Bestrafe einen Spieler (tötet ihn).
 
         Args:
             player_id: ID des Spielers
-            flag: Flag-Content (z.B. Unicode Emoji wie 🇩🇪)
-            comment: Optional - Kommentar zum Flag
+            reason: Grund für die Bestrafung
+        """
+        url = f"{self.base_url}/punish"
+        payload = {
+            "player_id": player_id,
+            "reason": reason
+        }
+
+        response = requests.post(url, headers=self._get_headers("application/json"), json=payload)
+        response.raise_for_status()
+        logger.info(f"Punished player {player_id}")
+
+    def add_flag_to_player(self, player_id: str, flag: str, comment: str = None) -> None:
+        """Add a flag to a player.
+
+        Args:
+            player_id: Player ID
+            flag: Flag content (e.g. Unicode emoji like 🇩🇪)
+            comment: Optional - Comment for the flag
         """
         url = f"{self.base_url}/flag_player"
         payload = {
