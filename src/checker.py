@@ -9,6 +9,39 @@ from shared.shared import logger, Printable
 
 logger = logger('checker')
 
+class QueuedAction:
+    """Base class for queued actions"""
+    pass
+
+class QueuedKick(QueuedAction):
+    def __init__(self, server: Server, player_id: str, player_name: str, message: str):
+        self.server = server
+        self.player_id = player_id
+        self.player_name = player_name
+        self.message = message
+
+class QueuedPunish(QueuedAction):
+    def __init__(self, server: Server, player_id: str, player_name: str, message: str):
+        self.server = server
+        self.player_id = player_id
+        self.player_name = player_name
+        self.message = message
+
+class QueuedMessage(QueuedAction):
+    def __init__(self, server: Server, player_id: str, player_name: str, message: str):
+        self.server = server
+        self.player_id = player_id
+        self.player_name = player_name
+        self.message = message
+
+class QueuedFlag(QueuedAction):
+    def __init__(self, server: Server, player_id: str, player_name: str, flag: str, comment: str):
+        self.server = server
+        self.player_id = player_id
+        self.player_name = player_name
+        self.flag = flag
+        self.comment = comment
+
 class CycleStats(Printable):
     def __init__(self):
         self.total_players = 0
@@ -24,6 +57,13 @@ class Checker:
         self.pending_skill_checks : dict[str, PlayerSkillCheck] = {}
         self.last_check : datetime|None = None
         self.words : list[Word] = words
+
+        # Action queues
+        self.kick_queue: list[QueuedKick] = []
+        self.punish_queue: list[QueuedPunish] = []
+        self.message_queue: list[QueuedMessage] = []
+        self.flag_queue: list[QueuedFlag] = []
+
         self.language_skill_checked_flag = os.getenv('LANGUAGE_SKILL_CHECKED_FLAG')
         self.kick_after_minutes = int(os.getenv('KICK_AFTER_MINUTES', '5'))
         self.grace_period_minutes = int(os.getenv('GRACE_PERIOD_MINUTES', '4'))
@@ -63,7 +103,7 @@ class Checker:
                         if time_since_request >= offline_timeout:
                             logger.info(
                                 f"Removing pending check for offline player {player_check.name} ({player_id}). "
-                                f"Time since request: {int(time_since_request.total_seconds() / 60)} minutes"
+                                f"Time since request: {time_since_request}"
                             )
                             players_to_remove.append(player_id)
 
@@ -77,8 +117,8 @@ class Checker:
                     except Exception as e:
                         logger.error(f"Error processing player {player_data.get('name', 'Unknown')} ({player_id}): {e}")
 
-                    # Cooldown to avoid API rate limits
-                    time.sleep(0.3)
+            # Process all queued actions
+            self._process_queues()
 
             self.stats.pending_skill_checks = len(self.pending_skill_checks)
             logger.info(f"cycle complete - {self.stats}")
@@ -131,7 +171,7 @@ class Checker:
         if player_check.question_changes_remaining > 0:
             message += "\n\n\n" + self.change_question_message.format(change_question_keyword=self.change_question_keyword)
 
-        server.api.message_player(player_id, message)
+        self.message_queue.append(QueuedMessage(server, player_id, player_name, message))
 
         self.pending_skill_checks[player_id] = player_check
 
@@ -156,16 +196,18 @@ class Checker:
                 if normalized_match in normalized_message:
                     logger.info(f"Player {player_check.name} ({player_id}) answered correctly: {message}")
 
-                    server.api.add_flag_to_player(
+                    self.flag_queue.append(QueuedFlag(
+                        server,
                         player_id,
+                        player_check.name,
                         self.language_skill_checked_flag,
                         f"Language check passed: {player_check.word.description} with answer '{message}' at {datetime.now().isoformat()}"
-                    )
+                    ))
 
                     del self.pending_skill_checks[player_id]
                     self.stats.skill_gained_this_cycle += 1
 
-                    server.api.message_player(player_id, self.success_message)
+                    self.message_queue.append(QueuedMessage(server, player_id, player_check.name, self.success_message))
 
                     return
 
@@ -193,7 +235,7 @@ class Checker:
                             change_question_keyword=self.change_question_keyword
                         )
 
-                    server.api.message_player(player_id, message_text)
+                    self.message_queue.append(QueuedMessage(server, player_id, player_check.name, message_text))
                     return
 
                 # The player can't change their question anymore, so we send the current question again
@@ -207,7 +249,7 @@ class Checker:
                         message_text += "\n\n\n" + self.change_question_message.format(
                             change_question_keyword=self.change_question_keyword
                         )
-                    server.api.message_player(player_id, message_text)
+                    self.message_queue.append(QueuedMessage(server, player_id, player_check.name, message_text))
 
         # No correct answer found
         time_elapsed = datetime.now() - player_check.requested_on
@@ -228,7 +270,7 @@ class Checker:
                     change_question_keyword=self.change_question_keyword
                 )
 
-            server.api.message_player(player_id, message_text)
+            self.message_queue.append(QueuedMessage(server, player_id, player_check.name, message_text))
             return
 
         # Kick after total time expired
@@ -237,7 +279,7 @@ class Checker:
                 f"Kicking player {player_check.name} ({player_id}) for exceeding time limit. "
                 f"Time elapsed: {time_elapsed}"
             )
-            server.api.kick_player(player_id, self.kick_message)
+            self.kick_queue.append(QueuedKick(server, player_id, player_check.name, self.kick_message))
             del self.pending_skill_checks[player_id]
 
         # Punish with message (the message serves as reminder)
@@ -248,14 +290,67 @@ class Checker:
                 word_description=player_check.word.description,
                 question_changes_remaining=player_check.question_changes_remaining
             )
-            # Punishing will fail if the player isn't alive, we send them a message instead
-            try:
-                server.api.punish_player(player_id, f"\n\n{punish_msg}\n\n")
-            except HTTPError as e:
-                server.api.message_player(player_id, punish_msg)
-
+            self.punish_queue.append(QueuedPunish(server, player_id, player_check.name, f"\n\n{punish_msg}\n\n"))
             self.stats.player_punishes += 1
 
+
+    def _process_queues(self):
+        """Process all queued actions in order: kicks, punishes (with fallback to messages), flags, messages"""
+
+        sleep_time = 0.4
+
+        # Process kicks first
+        for action in self.kick_queue:
+            try:
+                action.server.api.kick_player(action.player_id, action.message)
+                logger.debug(f"Kicked player {action.player_name} ({action.player_id})")
+                time.sleep(sleep_time)
+            except Exception as e:
+                logger.error(f"Failed to kick player {action.player_name} ({action.player_id}): {e}")
+
+        self.kick_queue.clear()
+
+        # Process punishes, if they fail, add to message queue
+        for action in self.punish_queue:
+            try:
+                action.server.api.punish_player(action.player_id, action.message)
+                logger.debug(f"Punished player {action.player_name} ({action.player_id})")
+                time.sleep(sleep_time)
+            except HTTPError as e:
+                logger.debug(f"Punish failed for {action.player_name} ({action.player_id}), sending message instead")
+                # Add to message queue as fallback
+                self.message_queue.append(QueuedMessage(
+                    action.server,
+                    action.player_id,
+                    action.player_name,
+                    action.message.strip()
+                ))
+            except Exception as e:
+                logger.error(f"Failed to punish player {action.player_name} ({action.player_id}): {e}")
+
+        self.punish_queue.clear()
+
+        # Process flags
+        for action in self.flag_queue:
+            try:
+                action.server.api.add_flag_to_player(action.player_id, action.flag, action.comment)
+                logger.debug(f"Added flag to player {action.player_name} ({action.player_id})")
+                time.sleep(sleep_time)
+            except Exception as e:
+                logger.error(f"Failed to add flag to player {action.player_name} ({action.player_id}): {e}")
+
+        self.flag_queue.clear()
+
+        # Process messages last
+        for action in self.message_queue:
+            try:
+                action.server.api.message_player(action.player_id, action.message)
+                logger.debug(f"Sent message to player {action.player_name} ({action.player_id})")
+                time.sleep(sleep_time)
+            except Exception as e:
+                logger.error(f"Failed to send message to player {action.player_name} ({action.player_id}): {e}")
+
+        self.message_queue.clear()
 
     def _fetch_logs(self, server: Server, since: datetime|None) -> dict:
         """Fetch chat logs and group them by player ID."""
