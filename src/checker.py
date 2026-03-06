@@ -255,7 +255,7 @@ class Checker:
         time_elapsed = datetime.now() - player_check.requested_on
         logger.info(
             f"Player {player_check.name} ({player_id}) no correct answer. "
-            f"Time elapsed: {time_elapsed} "
+            f"Time elapsed: {str(time_elapsed).split('.')[0]} "
             f"Possible words: {', '.join(player_check.word.matches)}"
         )
 
@@ -277,7 +277,7 @@ class Checker:
         elif time_elapsed >= timedelta(minutes=self.kick_after_minutes):
             logger.info(
                 f"Kicking player {player_check.name} ({player_id}) for exceeding time limit. "
-                f"Time elapsed: {time_elapsed}"
+                f"Time elapsed: {str(time_elapsed).split('.')[0]}"
             )
             self.kick_queue.append(QueuedKick(server, player_id, player_check.name, self.kick_message))
             del self.pending_skill_checks[player_id]
