@@ -33,6 +33,7 @@ class Checker:
         self.question_message = os.getenv('QUESTION_MESSAGE', 'QUESTION_MESSAGE\n\n{word_description}').replace('\\n', '\n').replace('\\"', '"')
         self.punish_message = os.getenv('PUNISH_MESSAGE', 'PUNISH_MESSAGE\n\n{word_description}').replace('\\n', '\n').replace('\\"', '"')
         self.kick_message = os.getenv('KICK_MESSAGE', 'KICK_MESSAGE hll-language-skill-check').replace('\\n', '\n').replace('\\"', '"')
+        self.success_message = os.getenv('SUCCESS_MESSAGE', 'SUCCESS_MESSAGE').replace('\\n', '\n').replace('\\"', '"')
         self.stats : CycleStats = CycleStats()
 
         if not self.language_skill_checked_flag:
@@ -140,6 +141,28 @@ class Checker:
 
             logger.debug(f"Checking message from {player_check.name}: '{message}' (normalized: '{normalized_message}')")
 
+            # Check against all possible matches
+            for match in player_check.word.matches:
+                # Normalize both sides to NFC form and lowercase
+                normalized_match = unicodedata.normalize('NFC', match).lower()
+                logger.debug(f"Comparing against match '{match}' (normalized: '{normalized_match}')")
+
+                if normalized_match in normalized_message:
+                    logger.info(f"Player {player_check.name} ({player_id}) answered correctly: {message}")
+
+                    server.api.add_flag_to_player(
+                        player_id,
+                        self.language_skill_checked_flag,
+                        f"Language check passed: {player_check.word.description} with answer '{message}' at {datetime.now().isoformat()}"
+                    )
+
+                    del self.pending_skill_checks[player_id]
+                    self.stats.skill_gained_this_cycle += 1
+
+                    server.api.message_player(player_id, self.success_message)
+
+                    return
+
             # Check if player requests another question
             if self.change_question_keyword in normalized_message:
                 if player_check.question_changes_remaining > 0:
@@ -150,8 +173,10 @@ class Checker:
                     player_check.word = new_word
                     player_check.requested_on = datetime.now()
 
-                    logger.info(f"Player {player_check.name} ({player_id}) requested new question. "
-                               f"Remaining changes: {player_check.question_changes_remaining}")
+                    logger.info(
+                        f"Player {player_check.name} ({player_id}) requested new question. "
+                        f"Remaining changes: {player_check.question_changes_remaining}"
+                    )
 
                     message_text = self.question_message.format(
                         word_description=player_check.word.description,
@@ -176,25 +201,6 @@ class Checker:
                             change_question_keyword=self.change_question_keyword
                         )
                     server.api.message_player(player_id, message_text)
-
-            # Check against all possible matches
-            for match in player_check.word.matches:
-                # Normalize both sides to NFC form and lowercase
-                normalized_match = unicodedata.normalize('NFC', match).lower()
-                logger.debug(f"Comparing against match '{match}' (normalized: '{normalized_match}')")
-
-                if normalized_match in normalized_message:
-                    logger.info(f"Player {player_check.name} ({player_id}) answered correctly: {message}")
-
-                    server.api.add_flag_to_player(
-                        player_id,
-                        self.language_skill_checked_flag,
-                        f"Language check passed: {player_check.word.description} with answer '{message}' at {datetime.now().isoformat()}"
-                    )
-
-                    del self.pending_skill_checks[player_id]
-                    self.stats.skill_gained_this_cycle += 1
-                    return
 
         # No correct answer found
         time_elapsed = datetime.now() - player_check.requested_on
