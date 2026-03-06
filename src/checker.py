@@ -25,8 +25,8 @@ class Checker:
         self.last_check : datetime|None = None
         self.words : list[Word] = words
         self.language_skill_checked_flag = os.getenv('LANGUAGE_SKILL_CHECKED_FLAG')
-        self.action_after_minutes = int(os.getenv('ACTION_AFTER_MINUTES', '2'))
-        self.grace_period_minutes = int(os.getenv('GRACE_PERIOD_MINUTES', '1'))
+        self.kick_after_minutes = int(os.getenv('KICK_AFTER_MINUTES', '5'))
+        self.grace_period_minutes = int(os.getenv('GRACE_PERIOD_MINUTES', '4'))
         self.max_question_changes = int(os.getenv('MAX_QUESTION_CHANGES', '1'))
         self.change_question_keyword = os.getenv('CHANGE_QUESTION_KEYWORD', 'hll-language-skill-check').lower()
         self.change_question_message = os.getenv('CHANGE_QUESTION_MESSAGE', 'CHANGE_QUESTION_MESSAGE\n\n{change_question_keyword}').replace('\\n', '\n').replace('\\"', '"')
@@ -55,7 +55,7 @@ class Checker:
                 logs_by_player = self._fetch_logs(server, previous_check)
 
                 # Remove pending checks for players who have been offline for too long
-                offline_timeout = timedelta(minutes=self.action_after_minutes + 5)
+                offline_timeout = timedelta(minutes=self.kick_after_minutes + 5)
                 players_to_remove = []
                 for player_id, player_check in self.pending_skill_checks.items():
                     if player_id not in current_players:
@@ -72,7 +72,13 @@ class Checker:
                     self.stats.removed_offline_checks += 1
 
                 for player_id, player_data in current_players.items():
-                    self._process_player(server, player_id, player_data, logs_by_player.get(player_id, []))
+                    try:
+                        self._process_player(server, player_id, player_data, logs_by_player.get(player_id, []))
+                    except Exception as e:
+                        logger.error(f"Error processing player {player_data.get('name', 'Unknown')} ({player_id}): {e}")
+
+                    # Cooldown to avoid API rate limits
+                    time.sleep(0.3)
 
             self.stats.pending_skill_checks = len(self.pending_skill_checks)
             logger.info(f"cycle complete - {self.stats}")
@@ -189,6 +195,7 @@ class Checker:
 
                     server.api.message_player(player_id, message_text)
                     return
+
                 # The player can't change their question anymore, so we send the current question again
                 else:
                     logger.debug(f"Player {player_check.name} ({player_id}) tried to change question but no changes remaining")
@@ -206,18 +213,33 @@ class Checker:
         time_elapsed = datetime.now() - player_check.requested_on
         logger.info(
             f"Player {player_check.name} ({player_id}) no correct answer. "
-            f"Time elapsed: {int(time_elapsed.total_seconds() / 60)} minutes "
+            f"Time elapsed: {time_elapsed} "
             f"Possible words: {', '.join(player_check.word.matches)}"
         )
 
-        # Wait during grace period
+        # Just re-message the player during grace period
         if time_elapsed < timedelta(minutes=self.grace_period_minutes):
+            message_text = self.question_message.format(
+                word_description=player_check.word.description,
+                question_changes_remaining=player_check.question_changes_remaining
+            )
+            if player_check.question_changes_remaining > 0:
+                message_text += "\n\n\n" + self.change_question_message.format(
+                    change_question_keyword=self.change_question_keyword
+                )
+
+            server.api.message_player(player_id, message_text)
             return
+
         # Kick after total time expired
-        elif time_elapsed >= timedelta(minutes=self.action_after_minutes):
-            logger.info(f"Kicking player {player_check.name} ({player_id}) for exceeding time limit")
+        elif time_elapsed >= timedelta(minutes=self.kick_after_minutes):
+            logger.info(
+                f"Kicking player {player_check.name} ({player_id}) for exceeding time limit. "
+                f"Time elapsed: {time_elapsed}"
+            )
             server.api.kick_player(player_id, self.kick_message)
             del self.pending_skill_checks[player_id]
+
         # Punish with message (the message serves as reminder)
         else:
             logger.info(f"Punishing player {player_check.name} ({player_id}) for not answering")
