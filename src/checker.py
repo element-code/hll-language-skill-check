@@ -63,7 +63,8 @@ class QueuedFlag(QueuedAction):
 class CycleStats(Printable):
     def __init__(self):
         self.total_players = 0
-        self.players_without_skill = 0
+        self.unassigned_players_without_skill = 0
+        self.assigned_players_without_skill = 0
         self.pending_skill_checks = 0
         self.skill_gained_this_cycle = 0
         self.player_punishes = 0
@@ -161,7 +162,12 @@ class Checker:
             logger.debug(f"Player {player_id} already has language skill checked flag")
             return
 
-        self.stats.players_without_skill += 1
+        if player_data.get("unit_name", None) == "unassigned":
+            logger.debug(f"Player {player_name} ({player_id}) is not assigned to a unit, skipping")
+            self.stats.unassigned_players_without_skill += 1
+            return
+
+        self.stats.assigned_players_without_skill += 1
         if player_id in self.pending_skill_checks:
             self._verify_pending_skill_check(server, player_id, logs)
         else:
