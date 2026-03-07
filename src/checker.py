@@ -9,6 +9,24 @@ from shared.shared import logger, Printable
 
 logger = logger('checker')
 
+def normalize_german_text(text: str) -> str:
+    """Normalize German text for comparison, handling umlauts and their ASCII equivalents."""
+    # First normalize Unicode to NFC form
+    text = unicodedata.normalize('NFC', text).lower()
+
+    # Replace ASCII equivalents with umlauts
+    replacements = {
+        'ue': 'ü',
+        'ae': 'ä',
+        'oe': 'ö',
+        'ss': 'ß'
+    }
+
+    for ascii_form, umlaut in replacements.items():
+        text = text.replace(ascii_form, umlaut)
+
+    return text
+
 class QueuedAction:
     """Base class for queued actions"""
     pass
@@ -68,6 +86,7 @@ class Checker:
         self.kick_after_minutes = int(os.getenv('KICK_AFTER_MINUTES', '5'))
         self.grace_period_minutes = int(os.getenv('GRACE_PERIOD_MINUTES', '4'))
         self.max_question_changes = int(os.getenv('MAX_QUESTION_CHANGES', '1'))
+        self.remessage_every_n_cycles = int(os.getenv('REMESSAGE_EVERY_N_CYCLES', '3'))
         self.change_question_keyword = os.getenv('CHANGE_QUESTION_KEYWORD', 'hll-language-skill-check').lower()
         self.change_question_message = os.getenv('CHANGE_QUESTION_MESSAGE', 'CHANGE_QUESTION_MESSAGE\n\n{change_question_keyword}').replace('\\n', '\n').replace('\\"', '"')
         self.question_message = os.getenv('QUESTION_MESSAGE', 'QUESTION_MESSAGE\n\n{word_description}').replace('\\n', '\n').replace('\\"', '"')
@@ -115,7 +134,7 @@ class Checker:
                     try:
                         self._process_player(server, player_id, player_data, logs_by_player.get(player_id, []))
                     except Exception as e:
-                        logger.error(f"Error processing player {player_data.get('name', 'Unknown')} ({player_id}): {e}")
+                        logger.exception(f"Error processing player {player_data.get('name', 'Unknown')} ({player_id}): {e}", exc_info=e)
 
             # Process all queued actions
             self._process_queues()
@@ -182,15 +201,15 @@ class Checker:
 
         for log in logs:
             message = log.get("content", "")
-            # Normalize Unicode to NFC form and lowercase for comparison
-            normalized_message = unicodedata.normalize('NFC', message).lower()
+            # Normalize message for comparison (handles umlauts and ASCII equivalents)
+            normalized_message = normalize_german_text(message)
 
             logger.debug(f"Checking message from {player_check.name}: '{message}' (normalized: '{normalized_message}')")
 
             # Check against all possible matches
             for match in player_check.word.matches:
-                # Normalize both sides to NFC form and lowercase
-                normalized_match = unicodedata.normalize('NFC', match).lower()
+                # Normalize match text as well
+                normalized_match = normalize_german_text(match)
                 logger.debug(f"Comparing against match '{match}' (normalized: '{normalized_match}')")
 
                 if normalized_match in normalized_message:
@@ -220,6 +239,7 @@ class Checker:
                     new_word = random.choice(available_words)
                     player_check.word = new_word
                     player_check.requested_on = datetime.now()
+                    player_check.cycles_since_last_message = 0
 
                     logger.info(
                         f"Player {player_check.name} ({player_id}) requested new question. "
@@ -256,21 +276,25 @@ class Checker:
         logger.info(
             f"Player {player_check.name} ({player_id}) no correct answer. "
             f"Time elapsed: {str(time_elapsed).split('.')[0]} "
-            f"Possible words: {', '.join(player_check.word.matches)}"
         )
 
-        # Just re-message the player during grace period
-        if time_elapsed < timedelta(minutes=self.grace_period_minutes):
-            message_text = self.question_message.format(
-                word_description=player_check.word.description,
-                question_changes_remaining=player_check.question_changes_remaining
-            )
-            if player_check.question_changes_remaining > 0:
-                message_text += "\n\n\n" + self.change_question_message.format(
-                    change_question_keyword=self.change_question_keyword
-                )
+        # Increment cycle counter
+        player_check.cycles_since_last_message += 1
 
-            self.message_queue.append(QueuedMessage(server, player_id, player_check.name, message_text))
+        # Just re-message the player during grace period (only every N cycles)
+        if time_elapsed < timedelta(minutes=self.grace_period_minutes):
+            if player_check.cycles_since_last_message >= self.remessage_every_n_cycles:
+                message_text = self.question_message.format(
+                    word_description=player_check.word.description,
+                    question_changes_remaining=player_check.question_changes_remaining
+                )
+                if player_check.question_changes_remaining > 0:
+                    message_text += "\n\n\n" + self.change_question_message.format(
+                        change_question_keyword=self.change_question_keyword
+                    )
+
+                self.message_queue.append(QueuedMessage(server, player_id, player_check.name, message_text))
+                player_check.cycles_since_last_message = 0
             return
 
         # Kick after total time expired
