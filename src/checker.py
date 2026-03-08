@@ -205,6 +205,11 @@ class Checker:
     def _verify_pending_skill_check(self, server: Server, player_id: str, logs: list[dict]):
         player_check = self.pending_skill_checks[player_id]
 
+        if logs:
+            logger.debug(f"Player {player_check.name} ({player_id}) has {len(logs)} message(s): {';'.join(log.get('content', '') for log in logs)}")
+        else:
+            logger.debug(f"Player {player_check.name} ({player_id}) has no messages")
+
         for log in logs:
             message = log.get("content", "")
             # Normalize message for comparison (handles umlauts and ASCII equivalents)

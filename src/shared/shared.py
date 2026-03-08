@@ -56,10 +56,24 @@ def     logger(name: str = None):
     global __logger_configured
 
     if not __logger_configured:
+        log_level_str = os.getenv('LOG_LEVEL', 'INFO').upper()
+        log_level_map = {
+            'DEBUG': logging.DEBUG,
+            'INFO': logging.INFO,
+            'WARNING': logging.WARNING,
+            'ERROR': logging.ERROR,
+            'CRITICAL': logging.CRITICAL
+        }
+        log_level = log_level_map.get(log_level_str, logging.INFO)
+
         log_formatter = LogFormatter(u'%(asctime)s %(levelname)s %(name)s: %(message)s')
         stream_handler = logging.StreamHandler()
         stream_handler.setFormatter(log_formatter)
-        logging.basicConfig(level=logging.INFO, handlers=[stream_handler])
+        logging.basicConfig(level=log_level, handlers=[stream_handler])
+
+        logging.getLogger().debug('Logger initialized with level: %s', log_level_str)
+
+        __logger_configured = True
 
     return logging.getLogger(name)
 
