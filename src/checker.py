@@ -150,6 +150,11 @@ class Checker:
         player_name = player_data.get("name", "Unknown")
         logger.debug(f"Checking player {player_name} ({player_id})")
         profile = player_data.get("profile", {})
+        # sometimes the player profile doesn't yet exist when the player just joined
+        # it should be included in the next cycle, so we can just skip the check for now
+        if profile is None:
+            logger.warning(f"Player {player_name} ({player_id}) has no profile data, skipping")
+            return
 
         # Prüfe ob Spieler bereits das Flag hat
         flags = profile.get("flags", [])
