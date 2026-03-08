@@ -13,8 +13,7 @@ It needs the following permissions:
 We need docker, docker-compose and git installed on your system.
 - `git clone https://github.com/element-code/hll-language-skill-check.git`
 - `cd hll-language-skill-check`
-- `git fetch --tags`
-- `git checkout $(git tag -l --contains HEAD | tail -n1)`
+- `git fetch --tags && git checkout $(git tag -l --contains HEAD --sort -v:refname | head -n1)`
 - `cp words.dist.json words.json`
 - `cp dist.env .env`
 - Edit the `.env` file to your needs `nano .env`.
@@ -38,6 +37,5 @@ If something doesn't work as expected, give it a few minutes to resolve.
 
 ## Updates
 - `cd hll-language-skill-check`
-- `docker compose down`
-- `git fetch --tags && git checkout $(git tag -l --contains HEAD | tail -n1)`
+- `git fetch --tags && git checkout $(git tag -l --contains HEAD --sort -v:refname | head -n1)`
 - `docker compose up --detach --build`
